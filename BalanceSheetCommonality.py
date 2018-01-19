@@ -4,12 +4,15 @@ Created on Sat Dec 16 20:20:03 2017
 
 @author: JairoFGR
 """
+# Import libraries #
 import pandas as pd
-from scipy.stats import zscore
+from sklearn.preprocessing import StandardScaler
 import numpy as np
+from sklearn import metrics
 from sklearn.metrics.pairwise import euclidean_distances
 import seaborn as sns; sns.set()
 import matplotlib.pyplot as plt
+from sklearn.cluster import DBSCAN
 
 # Read Database: #
 xl = pd.ExcelFile('C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/FinalDatabase2.xlsx')
@@ -29,7 +32,7 @@ IndustryO = di.iloc[:,2].str.split(' ', expand=True).iloc[:,0].str[0]
 dw = xl.parse(xl.sheet_names[3])
 industriesnumber = len(dw['Letter'])
 # Standarization of Variables
-df_norm = df.apply(zscore)
+df_norm = pd.DataFrame(StandardScaler().fit_transform(df))
 
 # Descriptive Analysis #
 # Mean Values by Feature of Industry
@@ -58,7 +61,6 @@ for element in range(0,industriesnumber):
  rows,columns = df_norm_i.shape
  if rows!=0:
   EuDist  = euclidean_distances(df_norm_i, df_norm_i)
-  VectorEuDist = EuDist.flatten(1)
   Distance[0][element] = np.triu(EuDist, k=0).sum() / rows
   mask = np.zeros_like(EuDist)
   mask[np.triu_indices_from(mask)] = True
@@ -67,6 +69,7 @@ for element in range(0,industriesnumber):
   Graph = sns.heatmap(EuDist, mask=mask, square=True, xticklabels=False, yticklabels=False)
   Graph.set_title(''.join([dw['Name'][element]]))      
   fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/',dw['Name'][element],'.pdf']))
+
 # General Distance Matrix #
 df_norm_total = df_norm.reindex(RearrangedRows)
 EuDist_total  = euclidean_distances(df_norm_total, df_norm_total)
@@ -78,19 +81,12 @@ with sns.axes_style("white"):
   Graph.set_title('Distance Matrix for All Enterprises')      
   fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.pdf']))
 
-
-## Gaussian Mixture Model Selection
-lowest_bic = np.infty
-bic = []
-n_components_range = range(1, 2)
-cv_types = ['spherical', 'tied', 'diag', 'full']
-for cv_type in cv_types:
-    for n_components in n_components_range:
-        # Fit a Gaussian mixture with EM
-        gmm = mixture.GaussianMixture(n_components=n_components,
-                                      covariance_type=cv_type)
-        gmm.fit(dx)
-        bic.append(gmm.bic(dx))
-        if bic[-1] < lowest_bic:
-            lowest_bic = bic[-1]
-            best_gmm = gmm
+# Estimation #
+db = DBSCAN(eps=20, min_samples=1).fit(df_norm)
+core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+core_samples_mask[db.core_sample_indices_] = True
+labels = db.labels_
+n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+print('Estimated number of clusters: %d' % n_clusters_)
+print("Calinski-Harabasz Coefficient: %0.3f"
+      % metrics.calinski_harabaz_score(df_norm, labels))
