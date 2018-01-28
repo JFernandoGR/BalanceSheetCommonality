@@ -6,13 +6,10 @@ Created on Sat Dec 16 20:20:03 2017
 
 """
 
-import pip
-pip.main(['install','mca'])
-import mca
 # Import libraries #
 import sys
 sys.path.insert(0, r'C:\Users\Jairo F Gudiño R\Desktop\Balance Sheet Commonality')
-from kmodes.kmodes import KModes
+from kmodes.kprototypes import KPrototypes
 
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -50,34 +47,62 @@ def gower_distance(X):
              feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature) / np.ptp(feature.values)
             else:
              feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature)
-#             print('Revisar caso de división por ceros')
-#             break
         individual_variable_distances.append(feature_dist)
     return np.array(individual_variable_distances).mean(0) #element=6 error de memoria
 
+def Manhattan_Distance(feature,centroid,f):    
+    return [(abs(feature - centroid[i][f].astype(np.float)).values) for i in range(0,centroid.shape[0])]
+
+def Dice_Distance(feature,centroid,f): 
+     intersection = np.concatenate([np.array(feature == centroid[i][f]) for i in range(0,centroid.shape[0])],axis=1) 
+     return (~(1*intersection).astype(bool)).astype(int).T
+
+def gower_distance_tocentroid(X,centroid):
+    centroid = np.concatenate((centroid[0], centroid[1]), axis=1)
+    individual_variable_distances = []
+    for i in range(X.shape[1]):
+        feature = X.iloc[:,[i]]
+        try: feature.dtypes[0]
+        except KeyError:
+          if np.ptp(feature.values)!=0:
+             feature_dist = Manhattan_Distance(feature,centroid,i)/ np.ptp(feature.values)
+          else:
+             feature_dist = Manhattan_Distance(feature,centroid,i)
+          feature_dist = np.reshape(feature_dist,(feature_dist.shape[0],feature_dist.shape[1]))
+        else:
+          if feature.dtypes[0]=='O':
+           feature_dist = Dice_Distance(feature,centroid,i).astype('float64')
+          else:
+            if np.ptp(feature.values)!=0:
+             feature_dist = Manhattan_Distance(feature,centroid,i)/ np.ptp(feature.values)
+            else:
+             feature_dist = Manhattan_Distance(feature,centroid,i)
+          feature_dist = np.reshape(feature_dist,(feature_dist.shape[0],feature_dist.shape[1]))
+        individual_variable_distances.append(feature_dist)
+    return np.array(individual_variable_distances).mean(0)
+    
 def getcities(x):
- return (x[:x.notnull().sum(axis=0)-1].str.cat(sep=' '))
+    return (x[:x.notnull().sum(axis=0)-1].str.cat(sep=' '))
 
 # Read Database: #
 xl = pd.ExcelFile('C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/FinalDatabase2.xlsx')
 # NUMERICAL VARIABLES #
 # Read features information
 df = xl.parse(xl.sheet_names[0])
-BalanceSheetNames = list(df)[1:]
+BalanceSheetNames = list(df)[0:]
 df = df.fillna(0) #Fill NaNs with zeros
-dx = pd.DataFrame(df, columns = BalanceSheetNames)
 rows,columns = df.shape
-# Descriptive Statistics by Feature
+# Standarization of Numerical Variables
+numerical = pd.DataFrame(StandardScaler().fit_transform(df), columns = BalanceSheetNames)# Descriptive Statistics by Feature
+dx = pd.DataFrame(df, columns = BalanceSheetNames)
 descriptivestats = dx.describe()
 correlationMatrix = dx.corr() #Correlation Matrix
-covarianceMatrix = df.cov() #Covariance Matrix
-# Standarization of Numerical Variables
-numerical = pd.DataFrame(StandardScaler().fit_transform(df))
+covarianceMatrix = df.cov() #Covariance Matrix                       
 # CATEGORICAL VARIABLES #
 # Read Industry Type Information
 di = xl.parse(xl.sheet_names[1])
 IndustryO = di.iloc[:,2].str.split(' ', expand=True).iloc[:,0].str[0]
-City = di.iloc[:,6].str.split('-', expand=True).apply(getcities,axis=1)
+City = di.iloc[:,6].str.split('-', expand=True).apply(getcities,axis=1).rename("Ciudad")
 categorical = pd.DataFrame([di.iloc[:,5],City,di.iloc[:,3]]).T
 df_norm = numerical.join(categorical)
 # Read industry classes to get info about categories
@@ -119,12 +144,7 @@ for element in range(0,industriesnumber):
    Graph = sns.heatmap(GowerDist, mask=mask, square=True, xticklabels=False, yticklabels=False)
    Graph.set_title(''.join([dw['Name'][element]]))      
    fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/',dw['Name'][element],'.pdf']))
-# Multiple-Correspondence Analysis #: COMPLETAR
-x_dummy = mca.dummy(df_norm)
-mca_ben = mca.MCA(x_dummy)
-#print(mca_ben.fs_r(1))
-#print(mca_ben.L)
-# http://nbviewer.jupyter.org/github/esafak/mca/blob/master/docs/mca-BurgundiesExample.ipynb
+
 # General Distance Matrix #
 df_norm_total = df_norm.reindex(RearrangedRows)
 GowerDist_total  = gower_distance(df_norm_total)
@@ -137,13 +157,13 @@ with sns.axes_style("white"):
   fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.pdf']))
 
 # Estimation: K-Prototypes #
-# Testing Parameters #
-K_MAX = 2
+# Testing Number of Clusters #
+K_MAX = 3
 centroids = []
 KK = range(1,K_MAX+1)
 for k in KK:
-   km = KModes(n_clusters=k, init='Huang', n_init=5, verbose=1)
-   km.fit_predict(df_norm) 
+   km = KPrototypes(n_clusters=k, init='Huang', n_init=5, verbose=1)
+   km.fit_predict(df_norm.values, categorical = [39,40,41]) 
    centroids.append(km.cluster_centroids_)
 D_k = [gower_distance_tocentroid(df_norm, cent) for cent in centroids]
 cIdx = [np.argmin(D,axis=1) for D in D_k]
@@ -166,8 +186,8 @@ plt.xlabel('Number of clusters')
 plt.ylabel('Percentage of variance explained (%)')
 plt.title('Elbow for K-Prototypes clustering')
 # Final Estimation
-km = KModes(n_clusters=2, init='Huang', n_init=5, verbose=1)
-clusters = km.fit_predict(df_norm)
+km = KPrototypes(n_clusters=2, init='Huang', n_init=5, verbose=1)
+clusters = km.fit_predict(df_norm, categorical = [39,40,41]) 
 centroids = km.cluster_centroids_
 # Retrieving Internal Parameters #
 
