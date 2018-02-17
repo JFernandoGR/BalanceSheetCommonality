@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, r'C:\Users\Jairo F Gudiño R\Desktop\Balance Sheet Commonality')
 from kmodes.kprototypes import KPrototypes
 
+import pylab as plot
 from sklearn.decomposition import PCA
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -42,32 +43,25 @@ def gower_distance(X):
         feature = X.iloc[:,[i]]
         try: feature.dtypes[0]
         except KeyError:
-          if np.ptp(feature.values)!=0:
-           feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature) / np.ptp(feature.values)
-          else:
            feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature)
         else:
           if feature.dtypes[0]=='O':
            feature_dist = DistanceMetric.get_metric('dice').pairwise(pd.get_dummies(feature))      
           else:
-            if np.ptp(feature.values)!=0:
-             feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature) / np.ptp(feature.values)
-            else:
-             feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature)
+           feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature)
         individual_variable_distances.append(feature_dist)
-    # np.array(individual_variable_distances).mean(0)
     return sum(individual_variable_distances) / len(individual_variable_distances)
 
 def Manhattan_Distance(feature,centroid,f,v): 
     if v==1:
-      op = [(abs(feature - centroid[i][f].astype(np.float)).values) for i in range(0,centroid.shape[0])]
+      op = [(abs(feature - centroid.iloc[i][f].astype(np.float)).values) for i in range(0,centroid.shape[0])]
     else:
       op = [(abs(feature - centroid.iloc[i][f])) for i in range(centroid.shape[0])] 
-    return op
+    return np.concatenate(op, axis=1)
 
 def Dice_Distance(feature,centroid,f,v):
     if v==1:
-     intersection = np.concatenate([np.array(feature == centroid[i][f]) for i in range(0,centroid.shape[0])],axis=1) 
+     intersection = np.concatenate([(feature == centroid[i][f]) for i in range(0,centroid.shape[0])],axis=1) 
     else:
      intersection = np.concatenate([(feature == centroid.iloc[i][f]) for i in range(0,centroid.shape[0])],axis=1)
      return (~(1*intersection).astype(bool)).astype(int).T
@@ -75,43 +69,29 @@ def Dice_Distance(feature,centroid,f,v):
 def gower_distance_tocentroid(X,centroid,v):
     # X: Dataframe, centroid: str1344
     if v==1:
-     centroid = np.concatenate((centroid[0], centroid[1]), axis=1) #str1344
+     centroid = np.concatenate((centroid[0], centroid[1]), axis=1)#str1344
     individual_variable_distances = []
     for i in range(X.shape[1]):
         feature = X.iloc[:,[i]] #Dataframe float64. feature.values: numpy.ndarray. Para categóricoas dtype('O')
         if v==1: 
          try: feature.dtypes[0]
          except KeyError:
-           if np.ptp(feature.values)!=0:
-              feature_dist = Manhattan_Distance(feature,centroid,i,1)/ np.ptp(feature.values)
-           else:
               feature_dist = Manhattan_Distance(feature,centroid,i,1)
-           feature_dist = np.reshape(feature_dist,(feature_dist.shape[0],feature_dist.shape[1])) #float64
          else:
            if feature.dtypes[0]=='O':
-            feature_dist = Dice_Distance(feature,centroid,i,1).astype('float64') #float64
+              feature_dist = Dice_Distance(feature,(centroid),i,1).astype('float64').T
            else:
-             if np.ptp(feature.values)!=0:
-              feature_dist = Manhattan_Distance(feature,centroid,i,1)/ np.ptp(feature.values)
-             else:
               feature_dist = Manhattan_Distance(feature,centroid,i,1)
-           feature_dist = np.reshape(feature_dist,(feature_dist.shape[0],feature_dist.shape[1]))
         else:
          try: feature = np.array(feature,dtype='float64')
          except ValueError:
-              feature_dist = Dice_Distance(feature,centroid,i,2).astype('float64')
+              feature_dist = Dice_Distance(feature,centroid,i,2).astype('float64').T
          else:
-            if np.ptp(feature)!=0:
-              feature_dist = Manhattan_Distance(feature,centroid,i,2)/ np.ptp(feature)
-            else:
-              feature_dist = Manhattan_Distance(feature,centroid,i,2)/ np.ptp([0, 1])
-            feature_dist = np.reshape(feature_dist,(feature_dist.shape[0],feature_dist.shape[1]))
+              feature_dist = Manhattan_Distance(feature,centroid,i,2)
         individual_variable_distances.append(feature_dist)
     return sum(individual_variable_distances) / len(individual_variable_distances)
 
 def partition_gower_distance(X,n):
-# X = df_norm_i
-# n = 5
  t = X.T
  _,columns = t.shape
  finalcolumns = columns
@@ -133,18 +113,18 @@ def partition_gower_distance(X,n):
        partition[possiblecombinations[f][1]].T,2) for f in range(len(possiblecombinations))]
  positions = pd.DataFrame(possiblecombinations)
  matrix = np.zeros(shape=(t.shape[1],t.shape[1]))
- for element in range(n):  
+ f1 = 0
+ for element in range(n+1):  
     mat_dist = np.array(positions[positions[0] == element].index).T
-    element*
-    test = np.concatenate([distances[f].T for f in mat_dist], axis=1)
-    if element==0:
-       matrix[0:test.shape[1]][0:test.shape[0]]=test
-    else:
-       
-    
- 
+    phi = np.concatenate([distances[f] for f in mat_dist], axis=1)
+    r,c = phi.shape
+    row = np.array(range(f1,(f1 + r)),dtype=np.intp)
+    col = np.array(range(f1,(f1 + c)),dtype=np.intp)
+    matrix[row[:,np.newaxis],col]= phi
+    matrix[col[:,np.newaxis],row]= np.array(phi.T)
+    f1 = (f1 + r)
  return matrix
-    
+
 def getcities(x):
     return (x[:x.notnull().sum(axis=0)-1].str.cat(sep=' '))
 
@@ -224,29 +204,32 @@ fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonali
 # General Distance Matrix #
 df_norm_total = df_norm.reindex(RearrangedRows)
 GowerDist_total  = partition_gower_distance(df_norm_total,10)
-mask = np.zeros_like(GowerDist_total)
-mask[np.triu_indices_from(mask)] = True
-with sns.axes_style("white"):
-  fig, Graph = plt.subplots()
-  Graph = sns.heatmap(GowerDist_total, mask=mask, square=True, xticklabels=False, yticklabels=False)
-  Graph.set_title('Distance Matrix for All Enterprises')      
-  fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.jpg']))
+plot.pcolormesh(GowerDist_total)
+plot.colorbar()
+plot.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.jpg']))
+#mask = np.zeros_like(GowerDist_total)
+#mask[np.triu_indices_from(mask)] = True
+#with sns.axes_style("white"):
+#  fig, Graph = plt.subplots()
+#  Graph = sns.heatmap(GowerDist_total, square=True, xticklabels=False, yticklabels=False) #mask=mask
+#  Graph.set_title('Distance Matrix for All Enterprises')      
+#  fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.jpg']))
 
 # Estimation: K-Prototypes #
 # Testing Number of Clusters #
-K_MAX = 10
+K_MAX = 42
 centroids = []
 KK = range(1,K_MAX+1)
 for k in KK:
    km = KPrototypes(n_clusters=k, init='Huang', n_init=5, verbose=1)
    km.fit_predict(df_norm.values, categorical = [39,40,41]) 
    centroids.append(km.cluster_centroids_)
-D_k = [gower_distance_tocentroid(df_norm, cent,1) for cent in centroids]
+D_k = [gower_distance_tocentroid(df_norm,cent,1) for cent in centroids]
 # axis=0: Horizontal. axis=1: Vertical
 cIdx = [np.argmin(D,axis=0) for D in D_k]
 dist = [np.min(D,axis=0) for D in D_k]
 tot_withinss = [sum(d**2) for d in dist]  # Total within-cluster sum of squares
-totss = sum(partition_gower_distance(df_norm,10)**2)/df_norm.shape[0]       # The total sum of squares
+totss = sum(partition_gower_distance(df_norm,10)**2)/df_norm.shape[0] # The total sum of squares
 betweenss = totss - tot_withinss          # The between-cluster sum of squares
 # Elbow Curve #
 kIdx = 9        # K=10
