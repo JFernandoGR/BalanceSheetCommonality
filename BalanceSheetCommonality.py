@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Dec 16 20:20:03 2017
-
-@author: JairoFGR
-
-"""
-
 # Import libraries #
 
 import pip
@@ -16,8 +8,8 @@ import sys
 sys.path.insert(0, r'C:\Users\Jairo F Gudiño R\Desktop\Balance Sheet Commonality')
 from kmodes.kprototypes import KPrototypes
 
-import pylab as plot
-from sklearn.decomposition import PCA
+from sklearn.decomposition import IncrementalPCA
+from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import numpy as np
@@ -159,9 +151,11 @@ dx['Industry'] = pd.DataFrame(IndustryO)
 MeanbyVariable = dx.groupby('Industry').mean()
 # Extraction of Gower Distances by Sector & Heatmaps #
 Distance = [[0] *industriesnumber for i in range(1)]
+LenIndex = [[0] *industriesnumber for i in range(1)]
 RearrangedRows = np.zeros(dtype=np.int, shape=len(IndustryO))
 for element in range(0,industriesnumber):
  Indexes = IndustryO[IndustryO==dw['Letter'][element]].index
+ LenIndex[0][element] = len(Indexes)
  if (element!=0 and element<7):
     p = np.where(RearrangedRows == 0)[0][0]
     RearrangedRows[p:p+len(Indexes)] = Indexes
@@ -171,11 +165,12 @@ for element in range(0,industriesnumber):
  else:
     RearrangedRows[0:len(Indexes)] = Indexes
  df_norm_i = df_norm.iloc[Indexes,:]
-# General Features by Industry #
  rows,columns = df_norm_i.shape
  if rows!=0:
+  # Distances among Enterprises by Industry #
   GowerDist  = np.array(sorted(gower_distance(df_norm_i),key=sum,reverse=True))
   Distance[0][element] = np.triu(GowerDist, k=0).sum() / rows
+  # Visualization of Distances among Enterprises by Industry #
   mask = np.zeros_like(GowerDist)
   mask[np.triu_indices_from(mask)] = True
   with sns.axes_style("white"):
@@ -183,37 +178,28 @@ for element in range(0,industriesnumber):
    Graph = sns.heatmap(GowerDist, mask=mask, square=True, xticklabels=False, yticklabels=False)
    Graph.set_title(''.join([dw['Name'][element]]))      
    fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/',dw['Name'][element],'.jpg']))
-# MCA & PCA Analysis #
-F = 20
-x_dummy = mca.dummy(df_norm.iloc[:,[-3,-2,-1]])
-mca_ben = mca.MCA(x_dummy,ncols=3)
-explained_variance = mca_ben.expl_var(greenacre=False, N = F)*100
-explained_variance.sum()
-MCAcolumns = [("Factor" + str(i+1)) for i in range(F)]
-MCAFactorScores = pd.DataFrame(mca_ben.fs_r(N=F), columns = MCAcolumns)
-PCADataframe = pd.concat([df_norm.iloc[:,range(df_norm.shape[1]-3)],MCAFactorScores],axis=1)
-reduced_data = PCA(n_components=2).fit_transform(PCADataframe)
-fig, Graph = plt.subplots()
-Graph = plt.scatter(reduced_data[:,0],reduced_data[:,1], color='blue')
-plt.xlabel('PCA-1')
-plt.ylabel('PCA-2')
-plt.title('Similaridad entre Empresas Grandes y Medianas del Sector Real: PCA')
-plt.show()
-fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','PCA','.pdf']))
 
 # General Distance Matrix #
 df_norm_total = df_norm.reindex(RearrangedRows)
 GowerDist_total  = partition_gower_distance(df_norm_total,10)
-plot.pcolormesh(GowerDist_total)
-plot.colorbar()
-plot.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.jpg']))
-#mask = np.zeros_like(GowerDist_total)
-#mask[np.triu_indices_from(mask)] = True
-#with sns.axes_style("white"):
-#  fig, Graph = plt.subplots()
-#  Graph = sns.heatmap(GowerDist_total, square=True, xticklabels=False, yticklabels=False) #mask=mask
-#  Graph.set_title('Distance Matrix for All Enterprises')      
-#  fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','TotalDistance','.jpg']))
+# Distances between industries #
+limits = np.cumsum(LenIndex)
+between_distances = np.zeros(shape=(industriesnumber,industriesnumber))
+f = 0
+for i in range(industriesnumber):
+    partmatrix = GowerDist_total[:,np.array(range(f,(limits[i])),dtype=np.intp)]
+    w = 0
+    for s in range(industriesnumber):
+        n = partmatrix[np.array(range(w,(limits[s])),dtype=np.intp),:]
+        between_distances[s,i] = np.triu(n, k=0).sum()/(n.shape[0]*n.shape[1])
+        w = limits[s]
+    f = limits[i]
+between_distances = np.tril(between_distances)
+fig, Graph = plt.subplots()
+Graph = plt.imshow(between_distances, interpolation='nearest', cmap=cm.Greys_r)
+plt.title('Similarity among Colombian Economic Sectors')
+plt.show()
+fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','IndustriesSimilarity','.pdf']))
 
 # Estimation: K-Prototypes #
 # Testing Number of Clusters #
@@ -252,3 +238,46 @@ centroids = km.cluster_centroids_
 # Retrieving Internal Parameters #
 
 # Plotting convergence #
+
+# MCA & PCA Analysis #
+F = 20
+x_dummy = mca.dummy(df_norm.iloc[:,[-3,-2,-1]])
+mca_ben = mca.MCA(x_dummy,ncols=3)
+explained_variance = mca_ben.expl_var(greenacre=False, N = F)*100
+explained_variance.sum()
+
+MCAcolumns = [("F" + str(i+1)) for i in range(F)]
+fig, Graph = plt.subplots()
+Graph = plt.bar(np.arange(len(MCAcolumns)),explained_variance, align='center', alpha=0.5)
+plt.xticks(np.arange(len(MCAcolumns)), MCAcolumns)
+plt.ylabel('Percentage')
+plt.title('Explained Variance by Factor (%): Multiple Correspondence Analysis')
+plt.show()
+fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','MCA','.pdf']))
+# MCA Explained Variance #
+ft = mca_ben.fs_r(N=F)
+MCAFactorScores = pd.DataFrame(ft, columns = MCAcolumns)
+PCADataframe = pd.concat([df_norm.iloc[:,range(df_norm.shape[1]-3)],MCAFactorScores],axis=1)
+PCAModel = IncrementalPCA(n_components=3)
+reduced_data = PCAModel.fit_transform(PCADataframe)
+explained_variancePCA = PCAModel.explained_variance_ratio_*100
+# PCA Explained Variance #
+PCAcolumns = [("F" + str(i+1)) for i in range(3)]
+fig, Graph = plt.subplots()
+Graph = plt.bar(np.arange(len(PCAcolumns)),explained_variancePCA, align='center', alpha=0.5)
+plt.xticks(np.arange(len(PCAcolumns)), PCAcolumns)
+plt.ylabel('Percentage')
+plt.title('Explained Variance by Factor (%): Principal Component Analysis')
+plt.show()
+fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','PCA','.pdf']))
+explained_variancecumPCA = explained_variancePCA.cumsum()
+# Similarity #
+fig, Graph = plt.subplots()
+ax = Axes3D(fig)
+Graph = ax.scatter(reduced_data[:,0],reduced_data[:,1],reduced_data[:,2], color='red')
+plt.xlabel('PCA-1')
+plt.ylabel('PCA-2')
+ax.set_zlabel('PCA-3')
+plt.title('Similarity among Colombian Real Sector Enterprises: PCA Factors')
+plt.show()
+fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','Similarity','.pdf']))
