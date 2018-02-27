@@ -20,7 +20,6 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import seaborn as sns; sns.set()
 import matplotlib.pyplot as plt
-from matplotlib import cm
 from sklearn.neighbors import DistanceMetric
 import itertools
 import math
@@ -224,6 +223,7 @@ pd.DataFrame(between_distances).to_csv('C:/Users/Jairo F Gudiño R/Desktop/Balan
 #fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','IndustriesSimilarity','.pdf']))
 pd.DataFrame(RearrangedRows).to_csv('C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/Order.csv', sep=',', encoding='utf-8', index=True)
 
+
 # Estimation: K-Prototypes #
 # Testing Number of Clusters #
 K_MAX = 29
@@ -281,6 +281,7 @@ plt.ylabel('Percentage of enterprises in the largest cluster (%)')
 plt.title('Percentage of enterprises in the largest cluster')
 plt.show()
 fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','LargestCluster','.pdf']))
+# Gamma Value: 0.49999999999999989
 
 # Additional Analysis #
 # MCA & PCA Analysis #
@@ -325,5 +326,3 @@ ax.set_zlabel('PCA-3')
 plt.title('Similarity among Colombian Real Sector Enterprises: PCA Factors')
 plt.show()
 fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','Similarity','.pdf']))
-
-####### END OF THE CODE #######
