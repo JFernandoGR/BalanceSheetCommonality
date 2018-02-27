@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+@author: Jairo Fernando Gudiño Rosero
+"""
+
 # Import libraries #
 
 import pip
@@ -18,6 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from sklearn.neighbors import DistanceMetric
 import itertools
+import math
 
 def gower_distance(X):
     """
@@ -46,7 +52,7 @@ def gower_distance(X):
 
 def Manhattan_Distance(feature,centroid,f,v): 
     if v==1:
-      op = [(abs(feature - centroid.iloc[i][f].astype(np.float)).values) for i in range(0,centroid.shape[0])]
+      op = [(abs(feature - centroid[i][f].astype(np.float)).values) for i in range(0,centroid.shape[0])]
     else:
       op = [(abs(feature - centroid.iloc[i][f])) for i in range(centroid.shape[0])] 
     return np.concatenate(op, axis=1)
@@ -56,7 +62,7 @@ def Dice_Distance(feature,centroid,f,v):
      intersection = np.concatenate([(feature == centroid[i][f]) for i in range(0,centroid.shape[0])],axis=1) 
     else:
      intersection = np.concatenate([(feature == centroid.iloc[i][f]) for i in range(0,centroid.shape[0])],axis=1)
-     return (~(1*intersection).astype(bool)).astype(int).T
+    return np.array(((1*~intersection).astype(bool)).astype(int).T)
 
 def gower_distance_tocentroid(X,centroid,v):
     # X: Dataframe, centroid: str1344
@@ -71,7 +77,7 @@ def gower_distance_tocentroid(X,centroid,v):
               feature_dist = Manhattan_Distance(feature,centroid,i,1)
          else:
            if feature.dtypes[0]=='O':
-              feature_dist = Dice_Distance(feature,(centroid),i,1).astype('float64').T
+              feature_dist = Dice_Distance(feature,centroid,i,1).astype('float64').T
            else:
               feature_dist = Manhattan_Distance(feature,centroid,i,1)
         else:
@@ -119,6 +125,11 @@ def partition_gower_distance(X,n):
 
 def getcities(x):
     return (x[:x.notnull().sum(axis=0)-1].str.cat(sep=' '))
+
+def maximumshare(x):
+    labels = x.join(pd.DataFrame(np.ones(shape=(x.shape[0],1)), columns = ['ones']))
+    groupsdata = labels['ones'].groupby([labels['names']]).sum()
+    return groupsdata.max()/x.shape[0]
 
 # Read Database: #
 xl = pd.ExcelFile('C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/FinalDatabase2.xlsx')
@@ -169,7 +180,7 @@ for element in range(0,industriesnumber):
  if rows!=0:
   # Distances among Enterprises by Industry #
   GowerDist  = np.array(sorted(gower_distance(df_norm_i),key=sum,reverse=True))
-  Distance[0][element] = np.triu(GowerDist, k=0).sum() / rows
+  Distance[0][element] = np.triu(GowerDist, k=0).sum()/(rows)
   # Visualization of Distances among Enterprises by Industry #
   mask = np.zeros_like(GowerDist)
   mask[np.triu_indices_from(mask)] = True
@@ -191,54 +202,87 @@ for i in range(industriesnumber):
     w = 0
     for s in range(industriesnumber):
         n = partmatrix[np.array(range(w,(limits[s])),dtype=np.intp),:]
-        between_distances[s,i] = np.triu(n, k=0).sum()/(n.shape[0]*n.shape[1])
+        between_distances[s,i] = n.sum()/math.sqrt(n.shape[0]*n.shape[1])
         w = limits[s]
     f = limits[i]
-between_distances = np.tril(between_distances)
-fig, Graph = plt.subplots()
-Graph = plt.imshow(between_distances, interpolation='nearest', cmap=cm.Greys_r)
+between_distances2 = np.tril(between_distances)
+fig, Graph = plt.subplots(figsize=(18,18))
+Graph = sns.heatmap(between_distances, annot=True, fmt=".2f",square=True)
+Graph.set_yticklabels(dw['Letter'].sort_values(ascending=False),minor=False)
+Graph.set_xticklabels(dw['Letter'],minor=False)
 plt.title('Similarity among Colombian Economic Sectors')
 plt.show()
 fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','IndustriesSimilarity','.pdf']))
+pd.DataFrame(between_distances).to_csv('C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/IndustryDistances.csv', sep=',', encoding='utf-8', index=True)
+#heatmap = Graph.pcolor(between_distances, cmap=plt.cm.Blues)
+#plt.colorbar(heatmap)
+#Graph.invert_yaxis()
+#Graph.set_yticklabels(dw['Letter'],minor=False)
+#Graph.set_xticklabels(dw['Letter'],minor=False)
+#plt.title('Similarity among Colombian Economic Sectors')
+#plt.show()
+#fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','IndustriesSimilarity','.pdf']))
+pd.DataFrame(RearrangedRows).to_csv('C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/Order.csv', sep=',', encoding='utf-8', index=True)
 
 # Estimation: K-Prototypes #
 # Testing Number of Clusters #
-K_MAX = 42
-centroids = []
+K_MAX = 29
+centroids_huang = []
+centroids_cao = []
+labels_huang = []
+labels_cao = []
+gamma_huang = []
+gamma_cao = []
 KK = range(1,K_MAX+1)
 for k in KK:
-   km = KPrototypes(n_clusters=k, init='Huang', n_init=5, verbose=1)
+   km = KPrototypes(n_clusters=k, init='Huang', n_init=10, verbose=1)
    km.fit_predict(df_norm.values, categorical = [39,40,41]) 
-   centroids.append(km.cluster_centroids_)
-D_k = [gower_distance_tocentroid(df_norm,cent,1) for cent in centroids]
+   centroids_huang.append(km.cluster_centroids_)
+   labels_huang.append(km.labels_)
+   gamma_huang.append(km.gamma)
+   km = KPrototypes(n_clusters=k, init='Cao', n_init=10, verbose=1)
+   km.fit_predict(df_norm.values, categorical = [39,40,41]) 
+   centroids_cao.append(km.cluster_centroids_)
+   labels_cao.append(km.labels_)
+   gamma_cao.append(km.gamma)
+D_k_huang = [gower_distance_tocentroid(df_norm,cent,1) for cent in centroids_huang]
+D_k_cao = [gower_distance_tocentroid(df_norm,cent,1) for cent in centroids_cao]
 # axis=0: Horizontal. axis=1: Vertical
-cIdx = [np.argmin(D,axis=0) for D in D_k]
-dist = [np.min(D,axis=0) for D in D_k]
-tot_withinss = [sum(d**2) for d in dist]  # Total within-cluster sum of squares
-totss = sum(partition_gower_distance(df_norm,10)**2)/df_norm.shape[0] # The total sum of squares
-betweenss = totss - tot_withinss          # The between-cluster sum of squares
+dist_huang = [np.min(D,axis=1) for D in D_k_huang]
+tot_withinss_huang = [sum(d**2) for d in dist_huang]  # Total within-cluster sum of squares
+dist_cao = [np.min(D,axis=1) for D in D_k_cao]
+tot_withinss_cao = [sum(d**2) for d in dist_cao]  # Total within-cluster sum of squares
+GowerDist_m = np.tril(partition_gower_distance(df_norm,10)) # GowerDist_m = np.tril(GowerDist_total)
+totss = sum(sum(GowerDist_m**2))/df_norm.shape[0] # The total sum of squares
+betweenss_huang = totss - tot_withinss_huang # The between-cluster sum of squares
+betweenss_cao = totss - tot_withinss_cao # The between-cluster sum of squares
 # Elbow Curve #
-kIdx = 9        # K=10
-clr = cm.spectral( np.linspace(0,1,10) ).tolist()
-mrk = 'os^p<dvh8>+x.'
+kIdx = 28
 fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.plot(KK, betweenss/totss*100, 'b*-')
-ax.plot(KK[kIdx], betweenss[kIdx]/totss*100, marker='o', markersize=12, 
-    markeredgewidth=2, markeredgecolor='r', markerfacecolor='None')
-ax.set_ylim((0,100))
+huang = plt.plot(KK, betweenss_huang/totss*100, 'b*-',label='Huang Inizialitation')
+cao = plt.plot(KK, betweenss_cao/totss*100, 'r*-',label='Cao Inizialitation')
+plt.legend()
 plt.grid(True)
 plt.xlabel('Number of clusters')
 plt.ylabel('Percentage of variance explained (%)')
-plt.title('Elbow for K-Prototypes clustering')
-# Final Estimation
-km = KPrototypes(n_clusters=2, init='Huang', n_init=5, verbose=1)
-clusters = km.fit_predict(df_norm.values, categorical = [39,40,41]) 
-centroids = km.cluster_centroids_
-# Retrieving Internal Parameters #
+plt.title('Elbow Curve for K-Prototypes Clustering')
+plt.show()
+fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','ElbowCurve','.pdf']))
+# Cluster Concentration through Number of Clusters #
+percentages_cao = pd.Series([maximumshare(pd.DataFrame(cent, columns=['names'])) for cent in labels_cao[0:]])
+percentages_huang = pd.Series([maximumshare(pd.DataFrame(cent, columns=['names'])) for cent in labels_huang[0:]])
+fig = plt.figure()
+huang = plt.plot(KK, percentages_cao, 'b*-',label='Huang Inizialitation')
+cao = plt.plot(KK, percentages_huang, 'r*-',label='Cao Inizialitation')
+plt.legend()
+plt.grid(True)
+plt.xlabel('Number of clusters')
+plt.ylabel('Percentage of enterprises in the largest cluster (%)')
+plt.title('Percentage of enterprises in the largest cluster')
+plt.show()
+fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','LargestCluster','.pdf']))
 
-# Plotting convergence #
-
+# Additional Analysis #
 # MCA & PCA Analysis #
 F = 20
 x_dummy = mca.dummy(df_norm.iloc[:,[-3,-2,-1]])
@@ -246,6 +290,7 @@ mca_ben = mca.MCA(x_dummy,ncols=3)
 explained_variance = mca_ben.expl_var(greenacre=False, N = F)*100
 explained_variance.sum()
 
+# MCA Explained Variance #
 MCAcolumns = [("F" + str(i+1)) for i in range(F)]
 fig, Graph = plt.subplots()
 Graph = plt.bar(np.arange(len(MCAcolumns)),explained_variance, align='center', alpha=0.5)
@@ -254,14 +299,13 @@ plt.ylabel('Percentage')
 plt.title('Explained Variance by Factor (%): Multiple Correspondence Analysis')
 plt.show()
 fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','MCA','.pdf']))
-# MCA Explained Variance #
 ft = mca_ben.fs_r(N=F)
+# PCA Explained Variance #
 MCAFactorScores = pd.DataFrame(ft, columns = MCAcolumns)
 PCADataframe = pd.concat([df_norm.iloc[:,range(df_norm.shape[1]-3)],MCAFactorScores],axis=1)
 PCAModel = IncrementalPCA(n_components=3)
 reduced_data = PCAModel.fit_transform(PCADataframe)
 explained_variancePCA = PCAModel.explained_variance_ratio_*100
-# PCA Explained Variance #
 PCAcolumns = [("F" + str(i+1)) for i in range(3)]
 fig, Graph = plt.subplots()
 Graph = plt.bar(np.arange(len(PCAcolumns)),explained_variancePCA, align='center', alpha=0.5)
@@ -271,7 +315,7 @@ plt.title('Explained Variance by Factor (%): Principal Component Analysis')
 plt.show()
 fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','PCA','.pdf']))
 explained_variancecumPCA = explained_variancePCA.cumsum()
-# Similarity #
+# Similarity 3D Plot#
 fig, Graph = plt.subplots()
 ax = Axes3D(fig)
 Graph = ax.scatter(reduced_data[:,0],reduced_data[:,1],reduced_data[:,2], color='red')
@@ -281,3 +325,5 @@ ax.set_zlabel('PCA-3')
 plt.title('Similarity among Colombian Real Sector Enterprises: PCA Factors')
 plt.show()
 fig.savefig(''.join(['C:/Users/Jairo F Gudiño R/Desktop/Balance Sheet Commonality/','Similarity','.pdf']))
+
+####### END OF THE CODE #######
